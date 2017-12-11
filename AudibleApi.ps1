@@ -1,19 +1,30 @@
+function Get-AudibleProductRating {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true,Position=0)][ValidateSet('US','UK','FR','DE','JP','IT','AU')]$Region
+    )
+
+    DynamicParam { Get-AudibleCategoryDynamicParam -Region $Region }
+
+    process {
+        Get-AudibleProduct -Region $Region -Category $PsBoundParameters['Category'] | % {
+            [pscustomobject]@{
+                Ratings = $_.rating.overall_distribution.num_ratings
+                Authors = ($_.authors.name -join ', ')
+                Narrators = ($_.narrators.name -join ', ');
+                Title = $_.title
+            }
+        } | Sort-Object -Property Ratings -Descending
+    }
+}
+
 function Get-AudibleProduct {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory=$true,Position=0)][ValidateSet('US','UK','FR','DE','JP','IT','AU')]$Region
     )
 
-    DynamicParam {   
-        $RuntimeParameterDictionary = New-Object System.Management.Automation.RuntimeDefinedParameterDictionary
-
-        $CategoryAttributes = New-Object System.Collections.ObjectModel.Collection[System.Attribute]
-        $CategoryAttributes.Add([System.Management.Automation.ParameterAttribute]@{Position = 1; Mandatory = $true})
-        $CategoryAttributes.Add((New-Object System.Management.Automation.ValidateSetAttribute(Get-AudibleCategory -Region $Region | % name)))
-        $RuntimeParameterDictionary.Add('Category', (New-Object System.Management.Automation.RuntimeDefinedParameter('Category', [string], $CategoryAttributes)))
-
-        return $RuntimeParameterDictionary
-    }
+    DynamicParam { Get-AudibleCategoryDynamicParam -Region $Region }
 
     process {
         $CategoryId = Get-AudibleCategory -Region $Region | ? name -eq $PsBoundParameters['Category'] | % id
@@ -36,14 +47,25 @@ function Get-AudibleProduct {
     }
 }
 
-function Get-AudibleCategory($Region) {
+function script:Get-AudibleCategoryDynamicParam($Region) {
+       $RuntimeParameterDictionary = New-Object System.Management.Automation.RuntimeDefinedParameterDictionary
+
+        $CategoryAttributes = New-Object System.Collections.ObjectModel.Collection[System.Attribute]
+        $CategoryAttributes.Add([System.Management.Automation.ParameterAttribute]@{Position = 1; Mandatory = $true})
+        $CategoryAttributes.Add((New-Object System.Management.Automation.ValidateSetAttribute(Get-AudibleCategory -Region $Region | % name)))
+        $RuntimeParameterDictionary.Add('Category', (New-Object System.Management.Automation.RuntimeDefinedParameter('Category', [string], $CategoryAttributes)))
+
+        return $RuntimeParameterDictionary
+}
+
+function script:Get-AudibleCategory($Region) {
      if ($null -eq $script:categories) {
         $script:categories = Invoke-RestMethod -UseBasicParsing -Uri ('{0}/catalog/categories' -f (Get-AudibleStore -Region $Region)) | % categories
      }
      $script:categories
 }
 
-function Get-AudibleStore([ValidateSet('US','UK','FR','DE','JP','IT','AU')]$Region) {
+function script:Get-AudibleStore([ValidateSet('US','UK','FR','DE','JP','IT','AU')]$Region) {
     switch ($Region) {
         'US' { 'https://api.audible.com/1.0' }
         'UK' { 'https://api.audible.co.uk/1.0' }
